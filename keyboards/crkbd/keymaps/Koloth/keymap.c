@@ -149,50 +149,50 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         )};
 
 // Modify these alues to adjust the scrolling speed
-#define SCROLL_DIVISOR_H 8.0
-#define SCROLL_DIVISOR_V 8.0
+#define SCROLL_DIVISOR_H 16.0
+#define SCROLL_DIVISOR_V 16.0
 
 // Variables to store accumulated scroll values
 float scroll_accumulated_h = 0;
 float scroll_accumulated_v = 0;
 
 // Modify these to adjust non-linear mouse scaling
-#define MAX_SCALE 32
+#define MAX_SCALE 4
 #define MIN_SCALE 1
-#define GROWTH_FACTOR 64
+#define GROWTH_FACTOR 2
 #define MOMENTUM 0.01
 
 // Variable to store an exponential moving average scaling factor to denoise the non-linear scaling
 float accumulated_factor = MIN_SCALE;
 
 // Arrow keys slight slowing
-#define ARROW_STEP 2
+#define ARROW_STEP 6
 int accumulated_arrow_x = 0;
 int accumulated_arrow_y = 0;
 
 float average_arrow_x = 0;
 float average_arrow_y = 0;
 
-#define ARROW_MOMENTUM 0.99
+#define ARROW_MOMENTUM 0.9
 
 // Alt-Tab parameteres
-#define ALT_TAB_STEP 4
+#define ALT_TAB_STEP 8
 int accumulated_alt_tab = 0;
 int pressed_command = 0;
 
 // add non-linear scaling to all mouse movements
-report_mouse_t pointing_device_task_user(report_mouse_t mouse_report) {
+void ps2_mouse_moved_user(report_mouse_t* mouse_report) {
     // alt-tab operation
     if (layer_state_is(3)) {
         // send alt-tab when on this layer. On first mouse movement, press
         // command.  Accumulate and sent tab or shift tab.  Release command
         // when you leave this layer.
 
-        if ((mouse_report.x != 0) && (pressed_command == 0)) {
+        if ((mouse_report->x != 0) && (pressed_command == 0)) {
           pressed_command = 1;
           register_code(KC_LGUI);
         }
-        accumulated_alt_tab += mouse_report.x;
+        accumulated_alt_tab += mouse_report->x;
     
         // process queued clicks
         if (accumulated_alt_tab <= -ALT_TAB_STEP){
@@ -205,14 +205,8 @@ report_mouse_t pointing_device_task_user(report_mouse_t mouse_report) {
         }
         
         // return a null report
-        mouse_report.x = 0;
-        mouse_report.y = 0;
-        return mouse_report;
-    }
-    if (pressed_command == 1) {
-      // if you are not on layer 3, and command is pressed, release it.
-      pressed_command = 0;
-      unregister_code(KC_LGUI);
+        mouse_report->x = 0;
+        mouse_report->y = 0;
     }
 
     // arrow key emulation
@@ -232,45 +226,44 @@ report_mouse_t pointing_device_task_user(report_mouse_t mouse_report) {
         // motion in the direction of the recent average 
 
         // update the accumulated arrow momentum
-        average_arrow_x = average_arrow_x*ARROW_MOMENTUM + (float) mouse_report.x*(1-ARROW_MOMENTUM);
-        average_arrow_y = average_arrow_y*ARROW_MOMENTUM + (float) mouse_report.y*(1-ARROW_MOMENTUM);
+        average_arrow_x = average_arrow_x*ARROW_MOMENTUM + (float) mouse_report->x*(1-ARROW_MOMENTUM);
+        average_arrow_y = average_arrow_y*ARROW_MOMENTUM + (float) mouse_report->y*(1-ARROW_MOMENTUM);
 
         // kill accumulated clicks orthogonal to average direction           
         if (fabs(average_arrow_x) > fabs(average_arrow_y)){
-            accumulated_arrow_x += mouse_report.x;
+            accumulated_arrow_x += mouse_report->x;
             accumulated_arrow_y = 0;
         }
         if (fabs(average_arrow_y) > fabs(average_arrow_x)){
             accumulated_arrow_x = 0;
-            accumulated_arrow_y += mouse_report.y;
+            accumulated_arrow_y += mouse_report->y;
         }
     
         // process queued clicks
         if (accumulated_arrow_x <= -ARROW_STEP){
             tap_code(KC_LEFT);
-            accumulated_arrow_x += ARROW_STEP;
+            accumulated_arrow_x = 0;
         }
         if (accumulated_arrow_x >= ARROW_STEP) {
             tap_code(KC_RIGHT);
-            accumulated_arrow_x -= ARROW_STEP;
+            accumulated_arrow_x = 0;
         }
         if (accumulated_arrow_y <= -ARROW_STEP){
             tap_code(KC_UP);
-            accumulated_arrow_y += ARROW_STEP;
+            accumulated_arrow_y = 0;
         }
         if (accumulated_arrow_y >= ARROW_STEP) {
             tap_code(KC_DOWN);
-            accumulated_arrow_y -= ARROW_STEP;
+            accumulated_arrow_y = 0;
         }
         
         // return a null report
-        mouse_report.x = 0;
-        mouse_report.y = 0;
-        return mouse_report;
+        mouse_report->x = 0;
+        mouse_report->y = 0;
     }
 
     // compute the size of the last mouse movement
-    float mouse_length = sqrt(mouse_report.x*mouse_report.x + mouse_report.y*mouse_report.y);
+    float mouse_length = sqrtf(mouse_report->x*mouse_report->x + mouse_report->y*mouse_report->y);
 
     // compute an instantaneous scaling factor and update exponential moving average
     float factor =  GROWTH_FACTOR*mouse_length+ MIN_SCALE;
@@ -278,32 +271,46 @@ report_mouse_t pointing_device_task_user(report_mouse_t mouse_report) {
 
     if (accumulated_factor > MAX_SCALE) {
         // clamp the scaling factor to avoid overflowing mouse_report
-        mouse_report.x *= MAX_SCALE;
-        mouse_report.y *= MAX_SCALE;
+        mouse_report->x *= MAX_SCALE;
+        mouse_report->y *= MAX_SCALE;
     }
     else {
         // scale up the mouse movement by the average factor
-        mouse_report.x = (int16_t)(mouse_report.x * accumulated_factor);
-        mouse_report.y = (int16_t)(mouse_report.y * accumulated_factor);
+        mouse_report->x = (int16_t)(mouse_report->x * accumulated_factor);
+        mouse_report->y = (int16_t)(mouse_report->y * accumulated_factor);
     }
 
     // switch to scrolling on every layer but 2 (where my mousekeys live)
     if (!layer_state_is(2)) {
         // Calculate and accumulate scroll values based on mouse movement and divisors
-        scroll_accumulated_h += (float)mouse_report.x / SCROLL_DIVISOR_H;
-        scroll_accumulated_v += (float)mouse_report.y / SCROLL_DIVISOR_V;
+        scroll_accumulated_h += (float)mouse_report->x / SCROLL_DIVISOR_H;
+        scroll_accumulated_v += (float)mouse_report->y / SCROLL_DIVISOR_V;
 
         // Assign integer parts of accumulated scroll values to the mouse report
-        mouse_report.h = -(int16_t)scroll_accumulated_h;
-        mouse_report.v = (int16_t)scroll_accumulated_v;
+        mouse_report->h = -(int16_t)scroll_accumulated_h;
+        mouse_report->v = (int16_t)scroll_accumulated_v;
 
         // Update accumulated scroll values by subtracting the integer parts
         scroll_accumulated_h -= (int16_t)scroll_accumulated_h;
         scroll_accumulated_v -= (int16_t)scroll_accumulated_v;
 
         // Clear the X and Y values of the mouse report
-        mouse_report.x = 0;
-        mouse_report.y = 0;
+        mouse_report->x = 0;
+        mouse_report->y = 0;
     }
-    return mouse_report;
+}
+
+layer_state_t layer_state_set_user(layer_state_t state) {
+  switch (get_highest_layer(state)) {
+    case 3:
+      break;
+    default:
+      if (pressed_command == 1) {
+        // if you are not on layer 3, and command is pressed, release it.
+        pressed_command = 0;
+        unregister_code(KC_LGUI);
+      }
+      break;
+    }
+  return state;
 }
