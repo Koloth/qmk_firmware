@@ -16,6 +16,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include <stdbool.h>
+#include "keyboard.h"
 #include "ps2_mouse.h"
 #include "wait.h"
 #include "gpio.h"
@@ -40,6 +41,10 @@ static inline void ps2_mouse_scroll_button_task(report_mouse_t *mouse_report);
 
 /* supports only 3 button mouse at this time */
 void ps2_mouse_init(void) {
+    if (!is_keyboard_master()) {
+        return;
+    }
+
     ps2_host_init();
 
     wait_ms(PS2_MOUSE_INIT_DELAY); // wait for powering up
@@ -72,6 +77,10 @@ __attribute__((weak)) void ps2_mouse_init_user(void) {}
 __attribute__((weak)) void ps2_mouse_moved_user(report_mouse_t *mouse_report) {}
 
 void ps2_mouse_task(void) {
+    if (!is_keyboard_master()) {
+        return;
+    }
+
     static uint8_t buttons_prev = 0;
     extern int     tp_buttons;
 
@@ -265,6 +274,7 @@ static inline void ps2_mouse_scroll_button_task(report_mouse_t *mouse_report) {
         SCROLL_SENT,
     } scroll_state                     = SCROLL_NONE;
     static uint16_t scroll_button_time = 0;
+    static int16_t  scroll_x, scroll_y;
 
     if (PS2_MOUSE_SCROLL_BTN_MASK == (mouse_report->buttons & (PS2_MOUSE_SCROLL_BTN_MASK))) {
         // All scroll buttons are pressed
@@ -272,13 +282,19 @@ static inline void ps2_mouse_scroll_button_task(report_mouse_t *mouse_report) {
         if (scroll_state == SCROLL_NONE) {
             scroll_button_time = timer_read();
             scroll_state       = SCROLL_BTN;
+            scroll_x           = 0;
+            scroll_y           = 0;
         }
 
         // If the mouse has moved, update the report to scroll instead of move the mouse
         if (mouse_report->x || mouse_report->y) {
-            scroll_state    = SCROLL_SENT;
-            mouse_report->v = -mouse_report->y / (PS2_MOUSE_SCROLL_DIVISOR_V);
-            mouse_report->h = mouse_report->x / (PS2_MOUSE_SCROLL_DIVISOR_H);
+            scroll_state = SCROLL_SENT;
+            scroll_y += mouse_report->y;
+            scroll_x += mouse_report->x;
+            mouse_report->v = -scroll_y / (PS2_MOUSE_SCROLL_DIVISOR_V);
+            mouse_report->h = scroll_x / (PS2_MOUSE_SCROLL_DIVISOR_H);
+            scroll_y += (mouse_report->v * (PS2_MOUSE_SCROLL_DIVISOR_V));
+            scroll_x -= (mouse_report->h * (PS2_MOUSE_SCROLL_DIVISOR_H));
             mouse_report->x = 0;
             mouse_report->y = 0;
 #ifdef PS2_MOUSE_INVERT_H
