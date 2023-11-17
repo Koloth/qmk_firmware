@@ -17,6 +17,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "action.h"
+#include <math.h>
 #include QMK_KEYBOARD_H
 
 #define BW_TAP_TIME 200  //configure max tap time, 200ms here
@@ -305,35 +306,4 @@ report_mouse_t pointing_device_task_user(report_mouse_t mouse_report) {
         mouse_report.y = 0;
     }
     return mouse_report;
-}
-
-layer_state_t layer_state_set_user(layer_state_t state) {
-    switch (get_highest_layer(state)) {
-    case 0:
-        pimoroni_trackball_set_rgbw(0,0,0,255);
-        break;
-    case 1:
-        pimoroni_trackball_set_rgbw(192,0,64,0);
-        break;
-    case 2:
-        pimoroni_trackball_set_rgbw(0,192,128,0);
-        break;
-    case 3:
-        pimoroni_trackball_set_rgbw(153,113,0,0);
-        break;
-    }
-  return state;
-}
-
-void keyboard_post_init_user(void) {
-    // default trackball to white
-	pimoroni_trackball_set_rgbw(0,0,0,255);
-}
-
-void suspend_power_down_user(void) {
-	pimoroni_trackball_set_rgbw(0,0,0,0);
-}
-
-void suspend_wakeup_init_user(void) {
-    pimoroni_trackball_set_rgbw(0,0,0,255);
 }

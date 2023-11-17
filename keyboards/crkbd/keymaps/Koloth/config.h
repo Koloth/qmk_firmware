@@ -28,4 +28,21 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define POINTING_DEVICE_ROTATION_90
 #define MOUSE_EXTENDED_REPORT
-#define PIMORONI_TRACKBALL_SCALE    
+
+#define SERIAL_USART_TX_PIN GP1
+
+// The default streaming mode is flaky and doesn't always work. This setting doesn't seem to affect performance.
+#define PS2_MOUSE_USE_REMOTE_MODE
+
+// Serial uses PIO0, change PS2 to PIO1.
+#define PS2_PIO_USE_PIO1
+
+#define PS2_MOUSE_INVERT_X
+#define PS2_MOUSE_INVERT_Y
+#define PS2_DATA_PIN    GP2
+#define PS2_CLOCK_PIN   GP3
+
+// Start faster when keyboard resets.
+#define PS2_MOUSE_INIT_DELAY 500
+
+#define RP2040_FLASH_GD25Q64CS
