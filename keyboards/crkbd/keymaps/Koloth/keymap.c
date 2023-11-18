@@ -149,8 +149,8 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         )};
 
 // Modify these alues to adjust the scrolling speed
-#define SCROLL_DIVISOR_H 16.0
-#define SCROLL_DIVISOR_V 16.0
+#define SCROLL_DIVISOR_H 32.0
+#define SCROLL_DIVISOR_V 32.0
 
 // Variables to store accumulated scroll values
 float scroll_accumulated_h = 0;
@@ -166,17 +166,15 @@ float scroll_accumulated_v = 0;
 float accumulated_factor = MIN_SCALE;
 
 // Arrow keys slight slowing
-#define ARROW_STEP 6
-int accumulated_arrow_x = 0;
-int accumulated_arrow_y = 0;
-
-float average_arrow_x = 0;
-float average_arrow_y = 0;
-
-#define ARROW_MOMENTUM 0.9
+#define ARROW_STEP 16
+#define ARROW_THRESH 2
+#define ARROW_RESET_THRESH 1
+int arrow_mode = 0;
+int arrow_x = 0;
+int arrow_y = 0; 
 
 // Alt-Tab parameteres
-#define ALT_TAB_STEP 8
+#define ALT_TAB_STEP 16
 int accumulated_alt_tab = 0;
 int pressed_command = 0;
 
@@ -211,50 +209,57 @@ void ps2_mouse_moved_user(report_mouse_t* mouse_report) {
 
     // arrow key emulation
     if (layer_state_is(1)) {
-        // move one space per click here, biasing towards vertical
-        // if you are moving in text horizontally and click an accidental
-        // vertical, you can just click back.  If you are moving vertically
-        // and send an accidental horizontal, you can't just click back
-        // if you are in a line shorter than where you started.  Thus,
-        // you should strongly prefer vertical movement to bias against
-        // accidental sideways clicks.  Almost all text scrolling is
-        // orthogonal, so this helps suppress diagonal motion.  Think of it
-        // as if you are in a box, and you move when you hit an edge, 
-        // resetting to the center each time.  
+        // with the trackpoint, it is nice to have it lock into a single 
+        // direction of travel until it is released
 
-        // This version additionally keeps a running average and only allows
-        // motion in the direction of the recent average 
-
-        // update the accumulated arrow momentum
-        average_arrow_x = average_arrow_x*ARROW_MOMENTUM + (float) mouse_report->x*(1-ARROW_MOMENTUM);
-        average_arrow_y = average_arrow_y*ARROW_MOMENTUM + (float) mouse_report->y*(1-ARROW_MOMENTUM);
-
-        // kill accumulated clicks orthogonal to average direction           
-        if (fabs(average_arrow_x) > fabs(average_arrow_y)){
-            accumulated_arrow_x += mouse_report->x;
-            accumulated_arrow_y = 0;
+        if (arrow_mode == 0) {
+          if (abs(mouse_report->x) > ARROW_THRESH) {
+            arrow_mode = 1;
+          }
+          if (abs(mouse_report->y) > ARROW_THRESH) {
+            arrow_mode = 2;
+          }
         }
-        if (fabs(average_arrow_y) > fabs(average_arrow_x)){
-            accumulated_arrow_x = 0;
-            accumulated_arrow_y += mouse_report->y;
+        if (arrow_mode == 1) {
+          if (mouse_report->x > ARROW_RESET_THRESH) {
+            arrow_x += mouse_report->x - ARROW_RESET_THRESH;
+            if (arrow_x > ARROW_STEP) {
+              arrow_x = 0;
+              tap_code(KC_RIGHT);
+            }
+          }
+          else if (mouse_report->x < -ARROW_RESET_THRESH) {
+            arrow_x += -mouse_report->x - ARROW_RESET_THRESH;
+            if (arrow_x > ARROW_STEP) {
+              arrow_x = 0;
+              tap_code(KC_LEFT);
+            }
+          }
+          else {
+            arrow_mode = 0;
+            arrow_x = 0;
+          }
         }
-    
-        // process queued clicks
-        if (accumulated_arrow_x <= -ARROW_STEP){
-            tap_code(KC_LEFT);
-            accumulated_arrow_x = 0;
-        }
-        if (accumulated_arrow_x >= ARROW_STEP) {
-            tap_code(KC_RIGHT);
-            accumulated_arrow_x = 0;
-        }
-        if (accumulated_arrow_y <= -ARROW_STEP){
-            tap_code(KC_UP);
-            accumulated_arrow_y = 0;
-        }
-        if (accumulated_arrow_y >= ARROW_STEP) {
-            tap_code(KC_DOWN);
-            accumulated_arrow_y = 0;
+        if (arrow_mode == 2) {
+          if (mouse_report->y > ARROW_RESET_THRESH) {
+            arrow_y += mouse_report->y - ARROW_RESET_THRESH;
+            if (arrow_y > ARROW_STEP) {
+              arrow_y = 0;
+              tap_code(KC_DOWN);
+            }
+          }
+          else if (mouse_report->y < -ARROW_RESET_THRESH) {
+            arrow_y += -mouse_report->y - ARROW_RESET_THRESH;
+            if (arrow_y > ARROW_STEP) {
+              arrow_y = 0;
+              tap_code(KC_UP);
+            }
+          }
+          else {
+            arrow_mode = 0;
+            arrow_x = 0;
+            arrow_y = 0;
+          }
         }
         
         // return a null report
@@ -301,16 +306,17 @@ void ps2_mouse_moved_user(report_mouse_t* mouse_report) {
 }
 
 layer_state_t layer_state_set_user(layer_state_t state) {
-  switch (get_highest_layer(state)) {
-    case 3:
-      break;
-    default:
-      if (pressed_command == 1) {
-        // if you are not on layer 3, and command is pressed, release it.
-        pressed_command = 0;
-        unregister_code(KC_LGUI);
-      }
-      break;
-    }
+  if ((!layer_state_is(3)) && (pressed_command == 1)) {
+    // if you are not on layer 3, and command is pressed, release it.
+    pressed_command = 0;
+    unregister_code(KC_LGUI);
+  }
+
+  if ((!layer_state_is(1)) && (arrow_mode != 0)) {
+    // if you are not on layer 1, and the arrow mode is not zero, make it zero.
+    arrow_mode = 0;
+    arrow_x = 0;
+    arrow_y = 0;
+  }
   return state;
 }
